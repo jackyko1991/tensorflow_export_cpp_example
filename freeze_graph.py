@@ -37,7 +37,7 @@ You can also look at freeze_graph_test.py for an example of how to use it.
 import tensorflow as tf
 
 from google.protobuf import text_format
-from tensorflow.python.client import graph_util
+from tensorflow.python.framework import graph_util
 
 
 FLAGS = tf.app.flags.FLAGS
