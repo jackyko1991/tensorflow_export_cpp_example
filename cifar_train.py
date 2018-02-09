@@ -37,20 +37,8 @@ tf.app.flags.DEFINE_integer('max_steps', 100000,
                             """Number of batches to run.""")
 tf.app.flags.DEFINE_boolean('log_device_placement', False,
                             """Whether to log device placement.""")
-tf.app.flags.DEFINE_integer('log_frequency', 10,
+tf.app.flags.DEFINE_integer('log_frequency', 1,
                             """How often to log results to the console.""")
-
-# from datetime import datetime
-# import os.path
-# import time
-# import numpy as np
-# from six.moves import xrange
-# import tensorflow as tf
-# import my_cifar
-# import my_input
-# import freeze_graph
-# import posixpath
-
 
 # tf.app.flags.DEFINE_string('model_dir', './tmp/my-model',
 #                            """Directory where to write model proto """
@@ -69,7 +57,6 @@ tf.app.flags.DEFINE_integer('log_frequency', 10,
 # # Parameters
 # display_step = 1
 # IMAGE_PIXELS = 32 * 32 * 3
-# NEW_LINE = '\n'
 
 # checkpoint_state_name = "checkpoint_state"
 # input_graph_name = "input_graph.pb"
@@ -110,90 +97,88 @@ def train():
     #  global_step = tf.Variable(0, trainable=False)
     global_step = tf.train.get_or_create_global_step()
 
-    # Get images and labels for CIFAR-10.
-    # Force input pipeline to CPU:0 to avoid operations sometimes ending up on
-    # GPU and resulting in a slow down.
+    images_placeholder, labels_placeholder = placeholder_inputs(FLAGS.batch_size)
+    # GEt images and labels for CIFAR-10
+    # # Force input pipeline to CPU:0 to avoid operations sometimes ending up on
+    # # GPU and resulting in a slow down.
     with tf.device('/cpu:0'):
-      images, labels = cifar.distorted_inputs()
+      images, labels = cifar_input.distorted_inputs()
 
     print('images shape: ', images.get_shape())
     print('labels shape: ', labels.get_shape())
 
     # Build a graph that computes logits predictions from the inference model
-    logits = cifar.inference(images)
+    logits = cifar.inference(images_placeholder)
     print('logits shape: ', logits.get_shape())
 
     # Calculate loss.
-    loss = cifar.loss(logits, labels)
+    loss = cifar.loss(logits, labels_placeholder)
 
 
-#     # Build a Graph that trains the model with one batch of examples and
-#     # updates the model parameters.
-#     train_op = my_cifar.training(loss, global_step)
+    # Build a Graph that trains the model with one batch of examples and
+    # updates the model parameters.
+    train_op = cifar.train(loss, global_step)
 
-#     # Calculate accuracy ##
-#     acc, n_correct = my_cifar.evaluation(logits, labels_placeholder)
+    # Calculate accuracy
+    acc, n_correct = cifar.evaluation(logits, labels_placeholder)
 
-#     # Create a saver
-#     saver = tf.train.Saver()
+    # Create a saver
+    saver = tf.train.Saver()
 
-#     tf.summary.scalar('Acc', acc)
-#     tf.summary.scalar('Loss', loss)
-#     tf.summary.image('Images', tf.reshape(images, shape=[-1, 32, 32, 3]), max_outputs=10)
-#     tf.summary.image('Val Images', tf.reshape(val_images, shape=[-1, 32, 32, 3]), max_outputs=10)
+    tf.summary.scalar('Acc', acc)
+    tf.summary.scalar('Loss', loss)
+    tf.summary.image('Images', tf.reshape(images, shape=[-1, 32, 32, 3]), max_outputs=10)
+    tf.summary.image('Val Images', tf.reshape(val_images, shape=[-1, 32, 32, 3]), max_outputs=10)
 
-#     # Build the summary operation based on the TF collection of Summaries.
-#     summary_op = tf.summary.merge_all()
+    # Build the summary operation based on the TF collection of Summaries.
+    summary_op = tf.summary.merge_all()
 
-#     # Build an initialization operation to run below.
-#     init = tf.initialize_all_variables()
+    # Build an initialization operation to run below.
+    init = tf.initialize_all_variables()
 
-#     # Start running operations on the Graph.
-#     sess = tf.Session(config=tf.ConfigProto(log_device_placement=FLAGS.log_device_placement))
-#     sess.run(init)
+    # Start running operations on the Graph.
+    sess = tf.Session(config=tf.ConfigProto(log_device_placement=FLAGS.log_device_placement))
+    sess.run(init)
 
-#     # Start the queue runners.
-#     coord = tf.train.Coordinator()
-#     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+    # Start the queue runners.
+    coord = tf.train.Coordinator()
+    threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
-#     summary_writer = tf.summary.FileWriter(FLAGS.train_dirr,
-#                                             graph_def=sess.graph_def)
+    summary_writer = tf.summary.FileWriter(FLAGS.train_dirr,
+                                            graph_def=sess.graph_def)
 
-#     if TRAIN:
-#       try:
-#         while not coord.should_stop():
-#           print("max steps: " + FLAGS.max_steps)
-#           for step in xrange(FLAGS.max_steps):
-#             print("step" +  step)
+    try:
+      while not coord.should_stop():
+        print("max steps: " + FLAGS.max_steps)
+        for step in xrange(FLAGS.max_steps):
+          print("step" +  step)
 
-#             images_r, labels_r = sess.run([images, labels])
-#             images_val_r, labels_val_r = sess.run([val_images, val_labels])
+          images_r, labels_r = sess.run([images, labels])
+          images_val_r, labels_val_r = sess.run([val_images, val_labels])
 
-#             train_feed = {images_placeholder: images_r,
-#                           labels_placeholder: labels_r}
+          train_feed = {images_placeholder: images_r,
+                        labels_placeholder: labels_r}
 
-#             val_feed = {images_placeholder: images_val_r,
-#                         labels_placeholder: labels_val_r}
+          val_feed = {images_placeholder: images_val_r,
+                      labels_placeholder: labels_val_r}
 
-#             start_time = time.time()
+          # timer for benchmarking
+          start_time = time.time()
 
-#             _, loss_value = sess.run([train_op, loss], feed_dict=train_feed)
-#             duration = time.time() - start_time
+          _, loss_value = sess.run([train_op, loss], feed_dict=train_feed)
+          duration = time.time() - start_time
 
-#             assert not np.isnan(loss_value), 'Model diverged with loss = NaN'
+          assert not np.isnan(loss_value), 'Model diverged with loss = NaN'
 
-#             if step % display_step == 0:
-#               num_examples_per_step = FLAGS.batch_size
-#               examples_per_sec = num_examples_per_step / duration
-#               sec_per_batch = float(duration)
+          if step % FLAGS.log_frequency == 0:
+            images_per_sec = FLAGS.batch_size / duration
+            sec_per_batch = float(duration)
 
-#               format_str = ('%s: step %d, loss = %.6f (%.1f examples/sec; %.3f '
-#                             'sec/batch)')
-#               print_str_loss = format_str % (datetime.now(), step, loss_value,
-#                                              examples_per_sec, sec_per_batch)
-#               print (print_str_loss)
-#               summary_str = sess.run([summary_op], feed_dict=train_feed)
-#               summary_writer.add_summary(summary_str[0], step)
+            format_str = ('%s: step %d, loss = %.6f (%.1f images/sec; %.3f sec/batch)')
+            print_str_loss = format_str % (datetime.now(), step, loss_value, images_per_sec, sec_per_batch)
+            print (print_str_loss)
+            summary_str = sess.run([summary_op], feed_dict=train_feed)
+            summary_writer.add_summary(summary_str[0], step)
 
 #             if step % (display_step * 5) == 0:
 #               acc_value, num_corroect = sess.run([acc, n_correct], feed_dict=train_feed)
