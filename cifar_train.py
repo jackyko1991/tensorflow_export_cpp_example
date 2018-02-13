@@ -46,8 +46,8 @@ tf.app.flags.DEFINE_integer('log_frequency', 1,
                             """How often to log results to the console.""")
 tf.app.flags.DEFINE_string('checkpoint_dir', './tmp/ckpt',
                             """Directory where to read model checkpoints.""")
-tf.app.flags.DEFINE_string('checkpoint_state_name','checkpoint_state',
-                            """Prefix name of the saved checkpoint_state""")
+tf.app.flags.DEFINE_string('checkpoint_state_name','checkpoint',
+                            """Prefix name of the saved checkpoint""")
 tf.app.flags.DEFINE_string('model_dir', './tmp/model',
                            """Directory where to write model proto """
                            """ to import in c++""")
@@ -55,20 +55,6 @@ tf.app.flags.DEFINE_string('input_graph_name', 'input_graph.pb',
                            """Name of input graph proto """)           
 tf.app.flags.DEFINE_string('output_graph_name', 'output_graph.pb',
                            """Name of output graph proto """)                 
-
-
-
-
-
-
-# tf.app.flags.DEFINE_string('eval_dir', './tmp/log_eval',
-#                            """Directory where to write event logs.""")
-
-
-# # Parameters
-# display_step = 1
-# IMAGE_PIXELS = 32 * 32 * 3
-
 
 def placeholder_inputs(batch_size):
   """Generate placeholder variables to represent the the input tensors.
