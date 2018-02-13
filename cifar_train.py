@@ -22,10 +22,13 @@ http://tensorflow.org/tutorials/deep_cnn/
 
 from datetime import datetime
 import time
+import os
+import numpy as np
 
 import tensorflow as tf
 
 import cifar
+import cifar_input
 
 # global definitions
 FLAGS = tf.app.flags.FLAGS
@@ -39,6 +42,10 @@ tf.app.flags.DEFINE_boolean('log_device_placement', False,
                             """Whether to log device placement.""")
 tf.app.flags.DEFINE_integer('log_frequency', 1,
                             """How often to log results to the console.""")
+tf.app.flags.DEFINE_string('checkpoint_dir', './tmp/ckpt',
+                            """Directory where to read model checkpoints.""")
+tf.app.flags.DEFINE_string('checkpoint_state_name','checkpoint_state',
+                            """Prefix name of the saved checkpoint_state""")
 
 # tf.app.flags.DEFINE_string('model_dir', './tmp/my-model',
 #                            """Directory where to write model proto """
@@ -51,8 +58,7 @@ tf.app.flags.DEFINE_integer('log_frequency', 1,
 
 # tf.app.flags.DEFINE_string('eval_dir', './tmp/log_eval',
 #                            """Directory where to write event logs.""")
-# tf.app.flags.DEFINE_string('checkpoint_dir', './tmp/ckpt',
-#                            """Directory where to read model checkpoints.""")
+
 
 # # Parameters
 # display_step = 1
@@ -63,25 +69,25 @@ tf.app.flags.DEFINE_integer('log_frequency', 1,
 # output_graph_name = "output_graph.pb"
 
 
-# def placeholder_inputs(batch_size):
-#   """Generate placeholder variables to represent the the input tensors.
-#   These placeholders are used as inputs by the rest of the model building
-#   code and will be fed from the downloaded ckpt in the .run() loop, below.
-#   Args:
-#     batch_size: The batch size will be baked into both placeholders.
-#   Returns:
-#     images_placeholder: Images placeholder.
-#     labels_placeholder: Labels placeholder.
-#   """
-#   # Note that the shapes of the placeholders match the shapes of the full
-#   # image and label tensors, except the first dimension is now batch_size
-#   # rather than the full size of the train or test ckpt sets.
-#   # batch_size = -1
-#   images_placeholder = tf.placeholder(tf.float32, shape=(batch_size,
-#                                                          IMAGE_PIXELS))
-#   labels_placeholder = tf.placeholder(tf.int32, shape=(batch_size))
+def placeholder_inputs(batch_size):
+  """Generate placeholder variables to represent the the input tensors.
+  These placeholders are used as inputs by the rest of the model building
+  code and will be fed from the downloaded ckpt in the .run() loop, below.
+  Args:
+    batch_size: The batch size will be baked into both placeholders.
+  Returns:
+    images_placeholder: Images placeholder.
+    labels_placeholder: Labels placeholder.
+  """
+  # Note that the shapes of the placeholders match the shapes of the full
+  # image and label tensors, except the first dimension is now batch_size
+  # rather than the full size of the train or test ckpt sets.
+  # batch_size = -1
+  images_placeholder = tf.placeholder(tf.float32, shape=(batch_size,
+                                                         cifar.IMAGE_SIZE,cifar.IMAGE_SIZE,3))
+  labels_placeholder = tf.placeholder(tf.int32, shape=(batch_size))
 
-#   return images_placeholder, labels_placeholder
+  return images_placeholder, labels_placeholder
 
 
 # def calculate_accuracy(logit, labels, feed):
@@ -102,7 +108,11 @@ def train():
     # # Force input pipeline to CPU:0 to avoid operations sometimes ending up on
     # # GPU and resulting in a slow down.
     with tf.device('/cpu:0'):
-      images, labels = cifar_input.distorted_inputs()
+      dest_directory = FLAGS.data_dir
+      extracted_dir_path = os.path.join(dest_directory, 'cifar-10-batches-bin').replace("\\","/")
+      print(extracted_dir_path)
+      images, labels = cifar_input.distorted_inputs(extracted_dir_path,FLAGS.batch_size)
+      # val_images, val_labels = cifar_input.inputs(False)
 
     print('images shape: ', images.get_shape())
     print('labels shape: ', labels.get_shape())
@@ -128,7 +138,7 @@ def train():
     tf.summary.scalar('Acc', acc)
     tf.summary.scalar('Loss', loss)
     tf.summary.image('Images', tf.reshape(images, shape=[-1, 32, 32, 3]), max_outputs=10)
-    tf.summary.image('Val Images', tf.reshape(val_images, shape=[-1, 32, 32, 3]), max_outputs=10)
+    # tf.summary.image('Val Images', tf.reshape(val_images, shape=[-1, 32, 32, 3]), max_outputs=10)
 
     # Build the summary operation based on the TF collection of Summaries.
     summary_op = tf.summary.merge_all()
@@ -144,23 +154,23 @@ def train():
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
-    summary_writer = tf.summary.FileWriter(FLAGS.train_dirr,
+    summary_writer = tf.summary.FileWriter(FLAGS.train_dir,
                                             graph_def=sess.graph_def)
 
     try:
       while not coord.should_stop():
-        print("max steps: " + FLAGS.max_steps)
-        for step in xrange(FLAGS.max_steps):
-          print("step" +  step)
+        print("max steps: " + str(FLAGS.max_steps))
+        for step in range(FLAGS.max_steps):
+          # print("step" +  str(step))
 
           images_r, labels_r = sess.run([images, labels])
-          images_val_r, labels_val_r = sess.run([val_images, val_labels])
+          # images_val_r, labels_val_r = sess.run([val_images, val_labels])
 
           train_feed = {images_placeholder: images_r,
                         labels_placeholder: labels_r}
 
-          val_feed = {images_placeholder: images_val_r,
-                      labels_placeholder: labels_val_r}
+          # val_feed = {images_placeholder: images_val_r,
+          #             labels_placeholder: labels_val_r}
 
           # timer for benchmarking
           start_time = time.time()
@@ -180,34 +190,34 @@ def train():
             summary_str = sess.run([summary_op], feed_dict=train_feed)
             summary_writer.add_summary(summary_str[0], step)
 
-#             if step % (display_step * 5) == 0:
-#               acc_value, num_corroect = sess.run([acc, n_correct], feed_dict=train_feed)
+          if step % (FLAGS.log_frequency * 5) == 0:
+            acc_value, num_corroect = sess.run([acc, n_correct], feed_dict=train_feed)
 
-#               format_str = '%s: step %d,  train acc = %.2f, n_correct= %d'
-#               print_str_train = format_str % (datetime.now(), step, acc_value, num_corroect)
-#               print (print_str_train)
+            format_str = '%s: step %d,  train acc = %.2f, n_correct= %d'
+            print_str_train = format_str % (datetime.now(), step, acc_value, num_corroect)
+            print (print_str_train)
 
-#             # Save the model checkpoint periodically.
-#             if (step + 1) % (display_step * 10) == 0 or (step + 1) == FLAGS.max_steps:
-#               val_acc_r, val_n_correct_r = sess.run([acc, n_correct], feed_dict=val_feed)  # , feed_dict=val_feed
+          # Save the model checkpoint periodically.
+          if (step + 1) % (FLAGS.log_frequency * 10) == 0 or (step + 1) == FLAGS.max_steps:
+            # val_acc_r, val_n_correct_r = sess.run([acc, n_correct], feed_dict=val_feed)  # , feed_dict=val_feed
 
-#               frmt_str = 'Step %d, Val Acc = %.2f, num correct = %d'
-#               print_str_val = frmt_str % (step, val_acc_r, val_n_correct_r)
-#               print(print_str_val)
+            # frmt_str = 'Step %d, Val Acc = %.2f, num correct = %d'
+            # print_str_val = frmt_str % (step, val_acc_r, val_n_correct_r)
+            # print(print_str_val)
 
 #               # checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')
 #               # saver.save(sess, checkpoint_path, global_step=step, latest_filename=checkpoint_state_name)
 
-#               checkpoint_prefix = os.path.join(FLAGS.checkpoint_dir, "saved_checkpoint")
-#               print("saving session in step " + step)
-#               saver.save(sess, checkpoint_prefix, global_step=0, latest_filename=checkpoint_state_name)
+            checkpoint_prefix = os.path.join(FLAGS.train_dir, "saved_checkpoint")
+            print("saving session in step " + str(step))
+            saver.save(sess, checkpoint_prefix, global_step=0, latest_filename=FLAGS.checkpoint_state_name)
 
-#       except tf.errors.OutOfRangeError:
-#         print ('Done training -- epoch limit reached')
+    except tf.errors.OutOfRangeError:
+      print ('Done training -- epoch limit reached')
 
-#       finally:
-#         # When done, ask the threads to stop.
-#         coord.request_stop()
+    finally:
+      # When done, ask the threads to stop.
+      coord.request_stop()
 
 #         '''
 #          TODO #3.1: Start freezing the graph when training finished
@@ -254,7 +264,6 @@ def train():
 #                             filename_tensor_name,
 #                             output_graph_path,
 #                             clear_devices)
-
 
 def main(argv=None):
   cifar.download_and_extract()

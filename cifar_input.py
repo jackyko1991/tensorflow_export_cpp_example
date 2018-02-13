@@ -13,6 +13,7 @@ import numpy as np
 import csv
 from six.moves import xrange
 import multiprocessing
+import cifar
 
 # Process images at the defined size. Note that original cifar 10 data image size is 32*32.
 # If you alter this number, the entire model architecture will change and the model would need to retrain
@@ -24,7 +25,7 @@ NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 50000
 NUM_EXAMPLES_PER_EPOCH_FOR_EVAL = 10000
 
 
-# IMAGE_SHAPE = [IMAGE_SIZE, IMAGE_SIZE, 3]
+
 # # Basic model parameters as external flags.
 # flags = tf.app.flags
 # FLAGS = flags.FLAGS
@@ -35,7 +36,7 @@ NUM_EXAMPLES_PER_EPOCH_FOR_EVAL = 10000
 
 # # Constants used for dealing with the files, matches convert_to_records.
 # TRAIN_FILE = 'train.tfrecords'
-# VALIDATION_FILE = 'validation.tfrecords'
+VALIDATION_FILE = 'validation.tfrecords'
 
 
 # def _dense_to_one_hot(labels_dense, num_classes):
@@ -98,7 +99,7 @@ NUM_EXAMPLES_PER_EPOCH_FOR_EVAL = 10000
 #   return images_only
 
 
-# def inputs(train=True, batch_size=FLAGS.batch_size, num_epochs=FLAGS.num_epochs):
+# def inputs(train=True, batch_size=cifar.FLAGS.batch_size, num_epochs=FLAGS.num_epochs):
 #   """Reads input ckpt num_epochs times.
 #   Args:
 #     train: Selects between the training (True) and validation (False) ckpt.

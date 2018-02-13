@@ -271,7 +271,7 @@ def _add_loss_summaries(total_loss):
 
   return loss_averages_op
 
-def train(loss, global_step):
+def train(total_loss, global_step):
   """Train CIFAR-10 model.
   Create an optimizer and apply to all trainable variables. Add moving
   average for all trainable variables.
@@ -296,7 +296,7 @@ def train(loss, global_step):
   tf.summary.scalar('learning_rate', lr)
 
   # Generate moving averages of all losses and associated summaries.
-  loss_average_op = _add_loss_summaries(total_loss)
+  loss_averages_op = _add_loss_summaries(total_loss)
 
 #   # Add a scalar summary for the snapshot loss.
 #   tf.summary.scalar(loss.op.name, loss)
@@ -330,12 +330,12 @@ def train(loss, global_step):
 
   with tf.control_dependencies([apply_gradient_op, variable_averages_op]):
     train_op = tf.no_op(name="train")
-    
+
   return train_op
 
 
-# def evaluation(logits, labels):
-#   """Evaluate the quality of the logits at predicting the label.
+def evaluation(logits, labels):
+  """Evaluate the quality of the logits at predicting the label.
 #   Args:
 #     logits: Logits tensor, float - [batch_size, NUM_CLASSES].
 #     labels: Labels tensor, int32 - [batch_size], with values in the
@@ -345,17 +345,17 @@ def train(loss, global_step):
 #     that were predicted correctly.
 #   """
 #   print('Evaluation..')
-#   # For a classifier model, we can use the in_top_k Op.
-#   # It returns a bool tensor with shape [batch_size] that is true for
-#   # the examples where the label's is was in the top k (here k=1)
-#   # of all logits for that example.
-#   correct = tf.nn.in_top_k(logits, labels, 1)
-#   num_correct = tf.reduce_sum(tf.cast(correct, tf.float32))
-#   # print(num_correct)
-#   acc_percent = num_correct / FLAGS.batch_size
+  # For a classifier model, we can use the in_top_k Op.
+  # It returns a bool tensor with shape [batch_size] that is true for
+  # the examples where the label's is was in the top k (here k=1)
+  # of all logits for that example.
+  correct = tf.nn.in_top_k(logits, labels, 1)
+  num_correct = tf.reduce_sum(tf.cast(correct, tf.float32))
+  # print(num_correct)
+  acc_percent = num_correct / FLAGS.batch_size
 
-#   # Return the number of true entries.
-#   return acc_percent * 100.0, num_correct  # Changed reduce_sum() to reduce_mean()
+  # Return the number of true entries.
+  return acc_percent * 100.0, num_correct  # Changed reduce_sum() to reduce_mean()
 
 def distorted_inputs():
   """
