@@ -26,9 +26,11 @@ import os
 import numpy as np
 
 import tensorflow as tf
+from tensorflow.core.protobuf import saver_pb2
 
 import cifar
 import cifar_input
+import freeze_graph as fg
 
 # global definitions
 FLAGS = tf.app.flags.FLAGS
@@ -46,10 +48,13 @@ tf.app.flags.DEFINE_string('checkpoint_dir', './tmp/ckpt',
                             """Directory where to read model checkpoints.""")
 tf.app.flags.DEFINE_string('checkpoint_state_name','checkpoint_state',
                             """Prefix name of the saved checkpoint_state""")
-
-# tf.app.flags.DEFINE_string('model_dir', './tmp/my-model',
-#                            """Directory where to write model proto """
-#                            """ to import in c++""")
+tf.app.flags.DEFINE_string('model_dir', './tmp/model',
+                           """Directory where to write model proto """
+                           """ to import in c++""")
+tf.app.flags.DEFINE_string('input_graph_name', 'input_graph.pb',
+                           """Name of input graph proto """)           
+tf.app.flags.DEFINE_string('output_graph_name', 'output_graph.pb',
+                           """Name of output graph proto """)                 
 
 
 
@@ -63,10 +68,6 @@ tf.app.flags.DEFINE_string('checkpoint_state_name','checkpoint_state',
 # # Parameters
 # display_step = 1
 # IMAGE_PIXELS = 32 * 32 * 3
-
-# checkpoint_state_name = "checkpoint_state"
-# input_graph_name = "input_graph.pb"
-# output_graph_name = "output_graph.pb"
 
 
 def placeholder_inputs(batch_size):
@@ -97,7 +98,7 @@ def placeholder_inputs(batch_size):
 #   return acc, n_correct
 
 
-def train():
+def train(freeze=False):
    """Train CIFAR-10 for a number of steps."""
    with tf.Graph().as_default():
     #  global_step = tf.Variable(0, trainable=False)
@@ -133,7 +134,7 @@ def train():
     acc, n_correct = cifar.evaluation(logits, labels_placeholder)
 
     # Create a saver
-    saver = tf.train.Saver()
+    saver = tf.train.Saver(write_version = saver_pb2.SaverDef.V1)
 
     tf.summary.scalar('Acc', acc)
     tf.summary.scalar('Loss', loss)
@@ -155,14 +156,12 @@ def train():
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
     summary_writer = tf.summary.FileWriter(FLAGS.train_dir,
-                                            graph_def=sess.graph_def)
+                                            graph=sess.graph)
 
     try:
       while not coord.should_stop():
         print("max steps: " + str(FLAGS.max_steps))
         for step in range(FLAGS.max_steps):
-          # print("step" +  str(step))
-
           images_r, labels_r = sess.run([images, labels])
           # images_val_r, labels_val_r = sess.run([val_images, val_labels])
 
@@ -208,9 +207,14 @@ def train():
 #               # checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')
 #               # saver.save(sess, checkpoint_path, global_step=step, latest_filename=checkpoint_state_name)
 
-            checkpoint_prefix = os.path.join(FLAGS.train_dir, "saved_checkpoint")
+            checkpoint_prefix = os.path.join(FLAGS.checkpoint_dir, "saved_checkpoint")
             print("saving session in step " + str(step))
             saver.save(sess, checkpoint_prefix, global_step=0, latest_filename=FLAGS.checkpoint_state_name)
+            # saver.save(sess, checkpoint_prefix, global_step=step)
+
+            # free the graph for c++ usage
+            if freeze:
+              freeze_graph(sess)
 
     except tf.errors.OutOfRangeError:
       print ('Done training -- epoch limit reached')
@@ -218,52 +222,42 @@ def train():
     finally:
       # When done, ask the threads to stop.
       coord.request_stop()
+      coord.join(threads)
+      sess.close()
 
-#         '''
-#          TODO #3.1: Start freezing the graph when training finished
-#         '''
-#         freeze_my_graph(sess)
+def freeze_graph(sess):
+  input_graph_name = FLAGS.input_graph_name
+  output_graph_name = FLAGS.output_graph_name
+  tf.train.write_graph(sess.graph.as_graph_def(), FLAGS.model_dir, input_graph_name)
 
-#       # Wait for threads to finish.
-#       coord.join(threads)
-#       sess.close()
+  # We save out the graph to disk, and then call the const conversion
+  # routine.
 
-#     # If you define TRAIN argument to False, so it will load from the checkpoint file and freeze.
-#     else:
-#       '''
-#          TODO #3.2: You can also freeze the graph from the latest checkpoint if you don't want to wait for a long time.
-#       '''
-#       freeze_my_graph(sess)
+  checkpoint_prefix = os.path.join(FLAGS.checkpoint_dir, "saved_checkpoint")
+  # checkpoint_prefix = os.path.join(FLAGS.checkpoint_dir, FLAGS.checkpoint_state_name)
+  input_graph_path = os.path.join(FLAGS.model_dir, input_graph_name)
+  input_saver_def_path = ""
+  input_binary = False
+  # input_checkpoint_path = checkpoint_prefix
+  input_checkpoint_path = checkpoint_prefix + "-0"
+  # input_checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt') + "-0"
+  # input_checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt-299')
+  # output_node_names = "Dense2/output_node"
+  output_node_names = "softmax_linear/softmax_linear"
+  restore_op_name = "save/restore_all"
+  filename_tensor_name = "save/Const:0"
+  output_graph_path = os.path.join(FLAGS.model_dir, output_graph_name)
+  clear_devices = False
 
-# def freeze_my_graph(sess):
-
-#   tf.train.write_graph(sess.graph.as_graph_def(), FLAGS.model_dir, input_graph_name)
-
-#   # We save out the graph to disk, and then call the const conversion
-#   # routine.
-
-#   checkpoint_prefix = posixpath.join(FLAGS.checkpoint_dir, "saved_checkpoint")
-#   input_graph_path = posixpath.join(FLAGS.model_dir, input_graph_name)
-#   input_saver_def_path = ""
-#   input_binary = False
-#   input_checkpoint_path = checkpoint_prefix + "-0"
-#   # input_checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt') + "-0"
-#   # input_checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt-299')
-#   output_node_names = "Dense2/output_node"
-#   restore_op_name = "save/restore_all"
-#   filename_tensor_name = "save/Const:0"
-#   output_graph_path = posixpath.join(FLAGS.model_dir, output_graph_name)
-#   clear_devices = False
-
-#   freeze_graph.freeze_graph(input_graph_path,
-#                             input_saver_def_path,
-#                             input_binary,
-#                             input_checkpoint_path,
-#                             output_node_names,
-#                             restore_op_name,
-#                             filename_tensor_name,
-#                             output_graph_path,
-#                             clear_devices)
+  fg.freeze_graph(input_graph_path,
+                            input_saver_def_path,
+                            input_binary,
+                            input_checkpoint_path,
+                            output_node_names,
+                            restore_op_name,
+                            filename_tensor_name,
+                            output_graph_path,
+                            clear_devices)
 
 def main(argv=None):
   cifar.download_and_extract()
@@ -272,7 +266,7 @@ def main(argv=None):
   if tf.gfile.Exists(FLAGS.train_dir):
     tf.gfile.DeleteRecursively(FLAGS.train_dir)
   tf.gfile.MakeDirs(FLAGS.train_dir)
-  train()
+  train(freeze=True)
 
 if __name__ == '__main__':
   tf.app.run()

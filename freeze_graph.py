@@ -90,12 +90,15 @@ def freeze_graph(input_graph, input_saver, input_binary, input_checkpoint,
       input_graph_def.ParseFromString(f.read())
     else:
       text_format.Merge(f.read(), input_graph_def)
+
+  print("Successful read input graph")
   # Remove all the explicit device specifications for this node. This helps to
   # make the graph more portable.
   if clear_devices:
     for node in input_graph_def.node:
       node.device = ""
   _ = tf.import_graph_def(input_graph_def, name="")
+  print("Successful import graph def")
 
   with tf.Session() as sess:
     if input_saver:
@@ -109,8 +112,10 @@ def freeze_graph(input_graph, input_saver, input_binary, input_checkpoint,
         saver.restore(sess, input_checkpoint)
     else:
       sess.run([restore_op_name], {filename_tensor_name: input_checkpoint})
+    print("saver restore complete")
     output_graph_def = graph_util.convert_variables_to_constants(
         sess, input_graph_def, output_node_names.split(","))
+    print("all graph variables has converted to constants")
 
   with tf.gfile.FastGFile(output_graph, "wb") as f:
     f.write(output_graph_def.SerializeToString())
